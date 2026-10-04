@@ -4,10 +4,22 @@ import { Activity, Award, Bell, BookOpen, CalendarDays, ChartNoAxesCombined, Che
 import PetModal from './components/PetModal.vue'
 import RecordModal from './components/RecordModal.vue'
 import TrendChart from './components/TrendChart.vue'
-import { calculateAge, daysFromToday, formatDate, normalRanges, todayISO } from './data'
+import { calculateAge, daysFromToday, formatDate, normalRanges } from './data'
+import { useNow } from './composables/useNow'
 import { usePetStore } from './composables/usePetStore'
 
 const { state, petById, petName, totalActivity, pendingVaccines, feedingTasks, medicationsToday, achievements, healthCompleteness, weightCompliance, add, addPet } = usePetStore()
+const { now, today } = useNow()
+const greeting = computed(() => {
+  const hour = now.value.getHours()
+  if (hour < 5) return '夜深了'
+  if (hour < 11) return '早上好'
+  if (hour < 14) return '中午好'
+  if (hour < 18) return '下午好'
+  return '晚上好'
+})
+const todayTitle = computed(() => `${now.value.toLocaleDateString('zh-CN', { weekday: 'long' })}，${now.value.toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' })}`)
+const todayShort = computed(() => formatDate(today.value))
 const activeNav = ref('overview')
 const showPetModal = ref(false)
 const recordType = ref('')
@@ -32,7 +44,14 @@ const healthStatus = computed(() => {
     : { label: '建议重点关注', className: 'attention' }
 })
 const activeAchievements = computed(() => achievements.value.filter((item) => item.unlocked))
-const upcomingVaccines = computed(() => state.vaccines.map((item) => ({ ...item, days: daysFromToday(item.nextDate) })).sort((a, b) => a.days - b.days))
+const upcomingVaccines = computed(() => state.vaccines.map((item) => ({ ...item, days: daysFromToday(item.nextDate, today.value) })).sort((a, b) => a.days - b.days))
+const overdueVaccineCount = computed(() => upcomingVaccines.value.filter((item) => item.days < 0).length)
+const dueSoonVaccineCount = computed(() => upcomingVaccines.value.filter((item) => item.days >= 0 && item.days <= 7).length)
+const vaccineNotice = computed(() => {
+  if (overdueVaccineCount.value) return `${overdueVaccineCount.value} 项已逾期，尽快安排`
+  if (dueSoonVaccineCount.value) return `${dueSoonVaccineCount.value} 项 7 天内到期`
+  return '暂无临期提醒'
+})
 const agenda = computed(() => {
   const feedingItems = state.feedings.flatMap((item) => Array.from(
     { length: Number(item.times || 1) },
@@ -46,7 +65,7 @@ const agenda = computed(() => {
     }),
   ))
   const medicationItems = state.medications
-    .filter((item) => item.startDate <= todayISO() && item.endDate >= todayISO())
+    .filter((item) => item.startDate <= today.value && item.endDate >= today.value)
     .map((item) => ({
       id: item.id,
       kind: 'medication',
@@ -62,7 +81,7 @@ const agenda = computed(() => {
       kind: 'vaccine',
       icon: ShieldCheck,
       title: `${petName(item.petId)} · ${item.name}`,
-      detail: item.days < 0 ? '已逾期，请尽快安排' : item.days === 0 ? '今天需要接种' : `${item.days} 天后到期`,
+      detail: item.days < 0 ? `已逾期 ${-item.days} 天，请尽快安排` : item.days === 0 ? '今天需要接种' : `${item.days} 天后到期`,
       time: '提醒',
     }))
   return [...feedingItems, ...medicationItems, ...vaccineItems]
@@ -90,19 +109,19 @@ function vaccineTone(days) { return days < 0 ? 'danger' : days <= 7 ? 'warning' 
       <div class="sidebar-bottom"><button><BookOpen :size="18" />知识库</button><button><Settings :size="18" />设置</button><div class="help-box"><CircleHelp :size="17" /><span>需要帮助？<b>查看使用指南</b></span></div></div>
     </aside>
     <main class="main-content">
-      <header class="topbar"><button class="icon-btn menu-toggle" @click="mobileMenu = true"><Menu :size="21" /></button><div><span class="eyebrow">{{ activeNav === 'overview' ? '家庭健康空间' : navItems.find((item) => item.id === activeNav)?.label }}</span><h1>{{ activeNav === 'overview' ? '早上好，林家。' : navItems.find((item) => item.id === activeNav)?.label }}</h1></div><div class="top-actions"><button class="icon-btn notification"><Bell :size="19" /><i></i></button><button class="user-chip"><span>林</span><strong>Lin</strong></button></div></header>
+      <header class="topbar"><button class="icon-btn menu-toggle" @click="mobileMenu = true"><Menu :size="21" /></button><div><span class="eyebrow">{{ activeNav === 'overview' ? '家庭健康空间' : navItems.find((item) => item.id === activeNav)?.label }}</span><h1>{{ activeNav === 'overview' ? `${greeting}，林家。` : navItems.find((item) => item.id === activeNav)?.label }}</h1></div><div class="top-actions"><button class="icon-btn notification"><Bell :size="19" /><i></i></button><button class="user-chip"><span>林</span><strong>Lin</strong></button></div></header>
       <div v-if="activeNav === 'overview'" class="page">
-        <section class="welcome-row"><div><p class="section-kicker">星期三，2026年9月16日</p><h2>今天也要好好照顾它们。</h2><p class="muted">这里是你和 Momo、Nori 的小小健康空间。</p></div><button class="btn btn-primary" @click="showPetModal = true"><Plus :size="17" />添加宠物</button></section>
-        <section class="stat-grid"><article class="stat-card"><div class="stat-icon green"><PawPrint :size="19" /></div><div><span>我的宠物</span><strong>{{ state.pets.length }}<small> 位</small></strong><em>档案都很完整</em></div></article><article class="stat-card"><div class="stat-icon peach"><Utensils :size="19" /></div><div><span>今日待喂食</span><strong>{{ feedingTasks }}<small> 餐</small></strong><em>按计划进行中</em></div></article><article class="stat-card"><div class="stat-icon lavender"><ShieldCheck :size="19" /></div><div><span>待接种疫苗</span><strong>{{ pendingVaccines }}<small> 项</small></strong><em :class="{ 'text-warning': pendingVaccines }">{{ pendingVaccines ? '有一项即将到期' : '暂无临期提醒' }}</em></div></article><article class="stat-card"><div class="stat-icon blue"><Activity :size="19" /></div><div><span>本周活动</span><strong>{{ totalActivity }}<small> 分钟</small></strong><em>平均体重变化 {{ averageWeightChange }}</em></div></article></section>
+        <section class="welcome-row"><div><p class="section-kicker">{{ todayTitle }}</p><h2>今天也要好好照顾它们。</h2><p class="muted">这里是你和 Momo、Nori 的小小健康空间。</p></div><button class="btn btn-primary" @click="showPetModal = true"><Plus :size="17" />添加宠物</button></section>
+        <section class="stat-grid"><article class="stat-card"><div class="stat-icon green"><PawPrint :size="19" /></div><div><span>我的宠物</span><strong>{{ state.pets.length }}<small> 位</small></strong><em>档案都很完整</em></div></article><article class="stat-card"><div class="stat-icon peach"><Utensils :size="19" /></div><div><span>今日待喂食</span><strong>{{ feedingTasks }}<small> 餐</small></strong><em>按计划进行中</em></div></article><article class="stat-card"><div class="stat-icon lavender"><ShieldCheck :size="19" /></div><div><span>待接种疫苗</span><strong>{{ pendingVaccines }}<small> 项</small></strong><em :class="overdueVaccineCount ? 'text-danger' : { 'text-warning': dueSoonVaccineCount }">{{ vaccineNotice }}</em></div></article><article class="stat-card"><div class="stat-icon blue"><Activity :size="19" /></div><div><span>本周活动</span><strong>{{ totalActivity }}<small> 分钟</small></strong><em>平均体重变化 {{ averageWeightChange }}</em></div></article></section>
         <section class="content-grid">
           <article class="panel pets-panel"><div class="panel-heading"><div><span class="eyebrow">成员档案</span><h3>我的宠物</h3></div><button class="text-btn" @click="activeNav = 'health'">查看档案 <ChevronRight :size="15" /></button></div><div class="pet-list"><button v-for="pet in state.pets" :key="pet.id" class="pet-card" :class="{ selected: selectedPetId === pet.id }" @click="selectedPetId = pet.id"><div class="pet-avatar" :class="pet.species === '狗' ? 'dog' : 'cat'"><img v-if="pet.photo" :src="pet.photo" :alt="pet.name" /><span v-else>{{ pet.species === '狗' ? '🐕' : pet.species === '猫' ? '🐈' : '🐾' }}</span></div><div class="pet-info"><strong>{{ pet.name }}</strong><span>{{ pet.breed || pet.species }} · {{ pet.gender }}</span><span>{{ calculateAge(pet.birthDate) }} · {{ pet.weight || '--' }} kg</span></div><div class="pet-status"><span class="status-dot"></span>健康</div><ChevronRight class="pet-arrow" :size="17" /></button><button class="add-pet-card" @click="showPetModal = true"><span><Plus :size="18" /></span><strong>添加新宠物</strong><small>建立专属健康档案</small></button></div></article>
-          <article class="panel agenda-panel"><div class="panel-heading"><div><span class="eyebrow">今天 · 9月16日</span><h3>日程提醒</h3></div><button class="icon-btn subtle"><CalendarDays :size="18" /></button></div><div class="agenda-list"><div v-for="item in agenda.slice(0, 5)" :key="item.id" class="agenda-item"><div class="agenda-time">{{ item.time }}</div><div class="agenda-icon" :class="item.kind"><component :is="item.icon" :size="17" /></div><div class="agenda-copy"><strong>{{ item.title }}</strong><span>{{ item.detail }}</span></div><button class="check-circle"><Check :size="14" /></button></div><div v-if="!agenda.length" class="empty-state">今天没有待办，享受轻松的一天吧。</div></div><button class="full-btn" @click="activeNav = 'schedule'">查看全部日程 <ChevronRight :size="15" /></button></article>
+          <article class="panel agenda-panel"><div class="panel-heading"><div><span class="eyebrow">今天 · {{ todayShort }}</span><h3>日程提醒</h3></div><button class="icon-btn subtle"><CalendarDays :size="18" /></button></div><div class="agenda-list"><div v-for="item in agenda.slice(0, 5)" :key="item.id" class="agenda-item"><div class="agenda-time">{{ item.time }}</div><div class="agenda-icon" :class="item.kind"><component :is="item.icon" :size="17" /></div><div class="agenda-copy"><strong>{{ item.title }}</strong><span>{{ item.detail }}</span></div><button class="check-circle"><Check :size="14" /></button></div><div v-if="!agenda.length" class="empty-state">今天没有待办，享受轻松的一天吧。</div></div><button class="full-btn" @click="activeNav = 'schedule'">查看全部日程 <ChevronRight :size="15" /></button></article>
         </section>
         <section class="content-grid lower-grid">
           <article class="panel trend-panel"><div class="panel-heading"><div><span class="eyebrow">健康趋势</span><h3>{{ currentPet?.name }} 的{{ metricLabel(selectedMetric) }}变化</h3></div><div class="segmented"><button v-for="metric in ['weight', 'temperature', 'heartRate']" :key="metric" :class="{ active: selectedMetric === metric }" @click="selectedMetric = metric">{{ metricLabel(metric) }}</button></div></div><div class="trend-summary"><div><strong>{{ recentHealthRecords.at(-1)?.value || currentPet?.weight || '--' }} <small>{{ normalRanges[selectedMetric].unit }}</small></strong><span>最近记录 · {{ recentHealthRecords.at(-1)?.date ? formatDate(recentHealthRecords.at(-1).date) : '暂无' }}</span></div><span class="health-status" :class="healthStatus.className"><i></i>{{ healthStatus.label }}</span><span class="range-tag"><span></span>正常范围 {{ normalRanges[selectedMetric].min }} - {{ normalRanges[selectedMetric].max }} {{ normalRanges[selectedMetric].unit }}</span></div><TrendChart :records="recentHealthRecords" :type="selectedMetric" /><button class="full-btn" @click="openRecord('health')">记录健康指标 <Plus :size="15" /></button></article>
           <article class="panel quick-panel"><div class="panel-heading"><div><span class="eyebrow">快速记录</span><h3>把日常变成习惯</h3></div><Sparkles :size="18" class="heading-spark" /></div><div class="quick-actions"><button @click="openRecord('health')"><span class="quick-icon health"><HeartPulse :size="19" /></span><span><strong>健康指标</strong><small>体重、体温、心率</small></span><ChevronRight :size="16" /></button><button @click="openRecord('vaccine')"><span class="quick-icon vaccine"><ShieldCheck :size="19" /></span><span><strong>疫苗与驱虫</strong><small>守护免疫计划</small></span><ChevronRight :size="16" /></button><button @click="openRecord('activity')"><span class="quick-icon activity"><Activity :size="19" /></span><span><strong>活动记录</strong><small>记录每一次活力</small></span><ChevronRight :size="16" /></button><button @click="openRecord('feeding')"><span class="quick-icon feeding"><Utensils :size="19" /></span><span><strong>喂食计划</strong><small>安排每日饮食</small></span><ChevronRight :size="16" /></button></div></article>
         </section>
-        <section class="content-grid bottom-grid"><article class="panel vaccine-panel"><div class="panel-heading"><div><span class="eyebrow">免疫计划</span><h3>疫苗与驱虫</h3></div><button class="text-btn" @click="openRecord('vaccine')">添加 <Plus :size="15" /></button></div><div class="vaccine-list"><div v-for="item in upcomingVaccines.slice(0, 3)" :key="item.id" class="vaccine-item"><div class="vaccine-mark"><ShieldCheck :size="17" /></div><div><strong>{{ item.category || '疫苗' }} · {{ item.name }}</strong><span>{{ petName(item.petId) }} · {{ item.hospital || '未填写医院' }}</span></div><span class="date-badge" :class="vaccineTone(item.days)">{{ item.days < 0 ? '已逾期' : item.days === 0 ? '今天' : `${item.days} 天后` }}</span></div></div></article><article class="panel achievement-panel"><div class="panel-heading"><div><span class="eyebrow">成长足迹</span><h3>成就徽章 <small>{{ activeAchievements.length }}/12</small></h3></div><button class="text-btn" @click="activeNav = 'achievements'">全部 <ChevronRight :size="15" /></button></div><div class="badge-row"><div v-for="item in achievements.slice(0, 6)" :key="item.id" class="badge-item" :class="{ locked: !item.unlocked }"><div><Award v-if="item.unlocked" :size="21" /><span v-else>?</span></div><small>{{ item.title }}</small></div></div></article></section>
+        <section class="content-grid bottom-grid"><article class="panel vaccine-panel"><div class="panel-heading"><div><span class="eyebrow">免疫计划</span><h3>疫苗与驱虫</h3></div><button class="text-btn" @click="openRecord('vaccine')">添加 <Plus :size="15" /></button></div><div class="vaccine-list"><div v-for="item in upcomingVaccines.slice(0, 3)" :key="item.id" class="vaccine-item"><div class="vaccine-mark"><ShieldCheck :size="17" /></div><div><strong>{{ item.category || '疫苗' }} · {{ item.name }}</strong><span>{{ petName(item.petId) }} · {{ item.hospital || '未填写医院' }}</span></div><span class="date-badge" :class="vaccineTone(item.days)">{{ item.days < 0 ? `已逾期 ${-item.days} 天` : item.days === 0 ? '今天到期' : `${item.days} 天后` }}</span></div></div></article><article class="panel achievement-panel"><div class="panel-heading"><div><span class="eyebrow">成长足迹</span><h3>成就徽章 <small>{{ activeAchievements.length }}/12</small></h3></div><button class="text-btn" @click="activeNav = 'achievements'">全部 <ChevronRight :size="15" /></button></div><div class="badge-row"><div v-for="item in achievements.slice(0, 6)" :key="item.id" class="badge-item" :class="{ locked: !item.unlocked }"><div><Award v-if="item.unlocked" :size="21" /><span v-else>?</span></div><small>{{ item.title }}</small></div></div></article></section>
       </div>
       <div v-else class="page placeholder-page">
         <section class="welcome-row"><div><p class="section-kicker">家庭健康空间</p><h2>{{ navItems.find((item) => item.id === activeNav)?.label }}</h2><p class="muted">所有记录都会自动保存在当前设备。</p></div><button class="btn btn-primary" @click="openRecord(activeNav === 'health' ? 'health' : activeNav === 'activity' ? 'activity' : 'vaccine')"><Plus :size="17" />添加记录</button></section>

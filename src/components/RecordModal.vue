@@ -25,6 +25,7 @@ function submit() {
 reset()
 watch(() => props.type, reset)
 watch(() => props.pets.length, reset)
+watch(() => props.visible, (visible) => { if (visible) reset() })
 </script>
 
 <template>

@@ -1,19 +1,21 @@
 import { computed, reactive, watch } from 'vue'
-import { achievementDefinitions, createDemoState, daysFromToday, isThisWeek, normalRanges, todayISO, uid } from '../data'
+import { achievementDefinitions, createDemoState, daysFromToday, isThisWeek, normalRanges, uid } from '../data'
+import { useNow } from './useNow'
 
 const STORAGE_KEY = 'petcare-home-state'
 const saved = localStorage.getItem(STORAGE_KEY)
 const state = reactive(saved ? JSON.parse(saved) : createDemoState())
+const { today } = useNow()
 
 watch(state, (value) => localStorage.setItem(STORAGE_KEY, JSON.stringify(value)), { deep: true })
 
 export function usePetStore() {
   const petById = (id) => state.pets.find((pet) => pet.id === id)
   const petName = (id) => petById(id)?.name || '未命名宠物'
-  const totalActivity = computed(() => state.activities.filter((item) => isThisWeek(item.date)).reduce((sum, item) => sum + Number(item.duration || 0), 0))
-  const pendingVaccines = computed(() => state.vaccines.filter((item) => daysFromToday(item.nextDate) <= 7).length)
+  const totalActivity = computed(() => state.activities.filter((item) => isThisWeek(item.date, today.value)).reduce((sum, item) => sum + Number(item.duration || 0), 0))
+  const pendingVaccines = computed(() => state.vaccines.filter((item) => daysFromToday(item.nextDate, today.value) <= 7).length)
   const feedingTasks = computed(() => state.feedings.reduce((sum, item) => sum + Number(item.times || 0), 0))
-  const medicationsToday = computed(() => state.medications.filter((item) => item.startDate <= todayISO() && item.endDate >= todayISO()).length)
+  const medicationsToday = computed(() => state.medications.filter((item) => item.startDate <= today.value && item.endDate >= today.value).length)
   const achievements = computed(() => achievementDefinitions.map((item) => ({ ...item, unlocked: item.condition(state) })))
   const healthCompleteness = (petId) => {
     const fields = ['weight', 'temperature', 'heartRate']

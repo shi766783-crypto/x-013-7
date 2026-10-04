@@ -26,21 +26,30 @@ export function uid(prefix = 'item') {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`
 }
 
-export function todayISO() {
-  const date = new Date()
+export function toISODate(date = new Date()) {
   const offset = date.getTimezoneOffset()
   return new Date(date.getTime() - offset * 60000).toISOString().slice(0, 10)
 }
 
-export function daysFromToday(dateString) {
-  const start = new Date(`${todayISO()}T00:00:00`)
+export function todayISO() {
+  return toISODate(new Date())
+}
+
+export function shiftDays(dateString, days) {
+  const date = new Date(`${dateString}T00:00:00`)
+  date.setDate(date.getDate() + days)
+  return toISODate(date)
+}
+
+export function daysFromToday(dateString, base = todayISO()) {
+  const start = new Date(`${base}T00:00:00`)
   const target = new Date(`${dateString}T00:00:00`)
   return Math.round((target - start) / 86400000)
 }
 
-export function isThisWeek(dateString) {
+export function isThisWeek(dateString, base = todayISO()) {
   const date = new Date(`${dateString}T00:00:00`)
-  const today = new Date(`${todayISO()}T00:00:00`)
+  const today = new Date(`${base}T00:00:00`)
   const day = today.getDay() || 7
   const monday = new Date(today)
   monday.setDate(today.getDate() - day + 1)
@@ -72,33 +81,34 @@ export function formatDate(dateString, withYear = false) {
 }
 
 export function createDemoState() {
+  const day = (offset) => shiftDays(todayISO(), offset)
   return {
     pets: [
       { id: 'pet-momo', name: 'Momo', species: '猫', breed: '英国短毛猫', gender: '母', birthDate: '2021-05-18', weight: 4.8, color: '奶油灰', neutered: true, microchip: '9820004112', photo: '', notes: '对海鲜敏感' },
       { id: 'pet-nori', name: 'Nori', species: '狗', breed: '柴犬', gender: '公', birthDate: '2020-10-03', weight: 9.2, color: '赤色', neutered: true, microchip: '', photo: '', notes: '' },
     ],
     healthRecords: [
-      { id: 'health-1', petId: 'pet-momo', type: 'weight', date: '2026-09-04', value: 4.6 },
-      { id: 'health-2', petId: 'pet-momo', type: 'weight', date: '2026-09-10', value: 4.8 },
-      { id: 'health-3', petId: 'pet-momo', type: 'temperature', date: '2026-09-12', value: 38.2 },
-      { id: 'health-4', petId: 'pet-nori', type: 'weight', date: '2026-09-06', value: 9.1 },
-      { id: 'health-5', petId: 'pet-nori', type: 'weight', date: '2026-09-14', value: 9.2 },
+      { id: 'health-1', petId: 'pet-momo', type: 'weight', date: day(-12), value: 4.6 },
+      { id: 'health-2', petId: 'pet-momo', type: 'weight', date: day(-6), value: 4.8 },
+      { id: 'health-3', petId: 'pet-momo', type: 'temperature', date: day(-4), value: 38.2 },
+      { id: 'health-4', petId: 'pet-nori', type: 'weight', date: day(-10), value: 9.1 },
+      { id: 'health-5', petId: 'pet-nori', type: 'weight', date: day(-2), value: 9.2 },
     ],
     vaccines: [
-      { id: 'vaccine-1', petId: 'pet-momo', name: '猫三联', date: '2026-01-12', nextDate: '2026-09-22', hospital: '和煦动物医院', notes: '年度加强针' },
-      { id: 'vaccine-2', petId: 'pet-nori', name: '狂犬疫苗', date: '2025-10-08', nextDate: '2026-10-08', hospital: '森屿宠物诊所', notes: '' },
+      { id: 'vaccine-1', petId: 'pet-momo', name: '猫三联', date: day(-266), nextDate: day(6), hospital: '和煦动物医院', notes: '年度加强针' },
+      { id: 'vaccine-2', petId: 'pet-nori', name: '狂犬疫苗', date: day(-360), nextDate: day(22), hospital: '森屿宠物诊所', notes: '' },
     ],
     medications: [
-      { id: 'med-1', petId: 'pet-momo', name: '益生菌', dose: '1包', frequency: '每日 1 次', startDate: '2026-09-15', endDate: '2026-09-21', notes: '随餐喂食' },
+      { id: 'med-1', petId: 'pet-momo', name: '益生菌', dose: '1包', frequency: '每日 1 次', startDate: day(-1), endDate: day(5), notes: '随餐喂食' },
     ],
     feedings: [
       { id: 'feed-1', petId: 'pet-momo', food: '主粮', brand: '渴望六种鱼', times: 2, portion: '35g' },
       { id: 'feed-2', petId: 'pet-nori', food: '主粮', brand: '爱肯拿鸭肉梨', times: 2, portion: '80g' },
     ],
     activities: [
-      { id: 'activity-1', petId: 'pet-nori', date: '2026-09-15', duration: 35, type: '散步', location: '江滨公园', notes: '' },
-      { id: 'activity-2', petId: 'pet-nori', date: '2026-09-13', duration: 50, type: '奔跑', location: '社区草坪', notes: '' },
-      { id: 'activity-3', petId: 'pet-momo', date: '2026-09-14', duration: 20, type: '玩耍', location: '家中', notes: '' },
+      { id: 'activity-1', petId: 'pet-nori', date: day(-1), duration: 35, type: '散步', location: '江滨公园', notes: '' },
+      { id: 'activity-2', petId: 'pet-nori', date: day(-3), duration: 50, type: '奔跑', location: '社区草坪', notes: '' },
+      { id: 'activity-3', petId: 'pet-momo', date: day(-2), duration: 20, type: '玩耍', location: '家中', notes: '' },
     ],
   }
 }
