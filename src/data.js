@@ -22,28 +22,42 @@ export const achievementDefinitions = [
   { id: 'family-record', icon: 'book', title: '家庭档案', desc: '填写宠物芯片或备注信息', condition: (s) => s.pets.some((item) => item.microchip || item.notes) },
 ]
 
+const WEEKDAY_NAMES = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六']
+
 export function uid(prefix = 'item') {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`
 }
 
-export function todayISO() {
-  const date = new Date()
-  const offset = date.getTimezoneOffset()
-  return new Date(date.getTime() - offset * 60000).toISOString().slice(0, 10)
+function toISODate(date) {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
 }
 
-export function daysFromToday(dateString) {
-  const start = new Date(`${todayISO()}T00:00:00`)
+export function todayISO() {
+  return toISODate(new Date())
+}
+
+// 以某一天为基准偏移 offsetDays 天，返回本地时区下的 YYYY-MM-DD
+export function shiftDate(baseISO, offsetDays) {
+  const date = new Date(`${baseISO || todayISO()}T00:00:00`)
+  date.setDate(date.getDate() + Number(offsetDays || 0))
+  return toISODate(date)
+}
+
+export function daysFromToday(dateString, today = todayISO()) {
+  const start = new Date(`${today}T00:00:00`)
   const target = new Date(`${dateString}T00:00:00`)
   return Math.round((target - start) / 86400000)
 }
 
-export function isThisWeek(dateString) {
+export function isThisWeek(dateString, today = todayISO()) {
   const date = new Date(`${dateString}T00:00:00`)
-  const today = new Date(`${todayISO()}T00:00:00`)
-  const day = today.getDay() || 7
-  const monday = new Date(today)
-  monday.setDate(today.getDate() - day + 1)
+  const now = new Date(`${today}T00:00:00`)
+  const day = now.getDay() || 7
+  const monday = new Date(now)
+  monday.setDate(now.getDate() - day + 1)
   monday.setHours(0, 0, 0, 0)
   const sunday = new Date(monday)
   sunday.setDate(monday.getDate() + 6)
@@ -71,34 +85,54 @@ export function formatDate(dateString, withYear = false) {
   return date.toLocaleDateString('zh-CN', withYear ? { year: 'numeric', month: 'long', day: 'numeric' } : { month: 'long', day: 'numeric' })
 }
 
+// "星期三"（接受 YYYY-MM-DD）
+export function weekdayName(dateString = todayISO()) {
+  return WEEKDAY_NAMES[new Date(`${dateString}T00:00:00`).getDay()]
+}
+
+// "2026年10月4日 星期日"
+export function formatFullDate(dateString = todayISO()) {
+  const date = new Date(`${dateString}T00:00:00`)
+  return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日 ${weekdayName(dateString)}`
+}
+
+// "10月4日"
+export function formatShortDate(dateString = todayISO()) {
+  const date = new Date(`${dateString}T00:00:00`)
+  return `${date.getMonth() + 1}月${date.getDate()}日`
+}
+
+// 演示数据的相对日期偏移（以原设计稿日期 2026-09-16 为基准换算），
+// 保证首次载入时疫苗、用药、记录都围绕"今天"发生。
 export function createDemoState() {
+  const d = (offset) => shiftDate(todayISO(), offset)
   return {
     pets: [
       { id: 'pet-momo', name: 'Momo', species: '猫', breed: '英国短毛猫', gender: '母', birthDate: '2021-05-18', weight: 4.8, color: '奶油灰', neutered: true, microchip: '9820004112', photo: '', notes: '对海鲜敏感' },
       { id: 'pet-nori', name: 'Nori', species: '狗', breed: '柴犬', gender: '公', birthDate: '2020-10-03', weight: 9.2, color: '赤色', neutered: true, microchip: '', photo: '', notes: '' },
     ],
     healthRecords: [
-      { id: 'health-1', petId: 'pet-momo', type: 'weight', date: '2026-09-04', value: 4.6 },
-      { id: 'health-2', petId: 'pet-momo', type: 'weight', date: '2026-09-10', value: 4.8 },
-      { id: 'health-3', petId: 'pet-momo', type: 'temperature', date: '2026-09-12', value: 38.2 },
-      { id: 'health-4', petId: 'pet-nori', type: 'weight', date: '2026-09-06', value: 9.1 },
-      { id: 'health-5', petId: 'pet-nori', type: 'weight', date: '2026-09-14', value: 9.2 },
+      { id: 'health-1', petId: 'pet-momo', type: 'weight', date: d(-12), value: 4.6 },
+      { id: 'health-2', petId: 'pet-momo', type: 'weight', date: d(-6), value: 4.8 },
+      { id: 'health-3', petId: 'pet-momo', type: 'temperature', date: d(-4), value: 38.2 },
+      { id: 'health-4', petId: 'pet-nori', type: 'weight', date: d(-10), value: 9.1 },
+      { id: 'health-5', petId: 'pet-nori', type: 'weight', date: d(-2), value: 9.2 },
     ],
     vaccines: [
-      { id: 'vaccine-1', petId: 'pet-momo', name: '猫三联', date: '2026-01-12', nextDate: '2026-09-22', hospital: '和煦动物医院', notes: '年度加强针' },
-      { id: 'vaccine-2', petId: 'pet-nori', name: '狂犬疫苗', date: '2025-10-08', nextDate: '2026-10-08', hospital: '森屿宠物诊所', notes: '' },
+      { id: 'vaccine-1', petId: 'pet-momo', name: '猫三联', date: d(-247), nextDate: d(6), hospital: '和煦动物医院', notes: '年度加强针' },
+      { id: 'vaccine-2', petId: 'pet-nori', name: '狂犬疫苗', date: d(-343), nextDate: d(22), hospital: '森屿宠物诊所', notes: '' },
     ],
     medications: [
-      { id: 'med-1', petId: 'pet-momo', name: '益生菌', dose: '1包', frequency: '每日 1 次', startDate: '2026-09-15', endDate: '2026-09-21', notes: '随餐喂食' },
+      { id: 'med-1', petId: 'pet-momo', name: '益生菌', dose: '1包', frequency: '每日 1 次', startDate: d(-1), endDate: d(5), notes: '随餐喂食' },
     ],
     feedings: [
       { id: 'feed-1', petId: 'pet-momo', food: '主粮', brand: '渴望六种鱼', times: 2, portion: '35g' },
       { id: 'feed-2', petId: 'pet-nori', food: '主粮', brand: '爱肯拿鸭肉梨', times: 2, portion: '80g' },
     ],
     activities: [
-      { id: 'activity-1', petId: 'pet-nori', date: '2026-09-15', duration: 35, type: '散步', location: '江滨公园', notes: '' },
-      { id: 'activity-2', petId: 'pet-nori', date: '2026-09-13', duration: 50, type: '奔跑', location: '社区草坪', notes: '' },
-      { id: 'activity-3', petId: 'pet-momo', date: '2026-09-14', duration: 20, type: '玩耍', location: '家中', notes: '' },
+      { id: 'activity-1', petId: 'pet-nori', date: d(-1), duration: 35, type: '散步', location: '江滨公园', notes: '' },
+      { id: 'activity-2', petId: 'pet-nori', date: d(-3), duration: 50, type: '奔跑', location: '社区草坪', notes: '' },
+      { id: 'activity-3', petId: 'pet-momo', date: d(-2), duration: 20, type: '玩耍', location: '家中', notes: '' },
     ],
   }
 }
